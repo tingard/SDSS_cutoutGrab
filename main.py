@@ -137,5 +137,4 @@ def main():
     b = cutFits(bFile, ra, dec, 10)
     im2 = ax2.imshow(b, cmap='bone')
     fig.colorbar(im2, ax=ax2)
-    im = list(zip(ax, (r,g,b).map(lambda a, c: a.imshow())
     plt.show()
