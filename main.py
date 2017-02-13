@@ -109,14 +109,19 @@ def getFitsFromCoord(ra=None, dec=None, threshold=5E-6, **kwargs):
             threshold=threshold*3
         )
 
-def cutFits(f, ra, dec, size):
+def cutFits(f, ra, dec, size=(200, 200)):
     if not os.path.isfile(f): return None
+    if type(size) == type(1): size =  (size, size)
+    try:
+        if len(size) != 2: return
+    except Exception as e:
+        print("\033[31msize must be an int or length-2 list/tuple/array\033[0m")
     fFile = fits.open(f)
     frame = fFile[0].header['SYSTEM'].strip()
     p = SkyCoord(ra = ra*u.degree, dec=dec*u.degree, frame=frame.lower())
     size = u.Quantity((50, 50), u.arcsec)
     wcs = WCS(header=fFile[0].header)
-    cutout = Cutout2D(fFile[0].data, p, (200, 200), wcs=wcs)
+    cutout = Cutout2D(fFile[0].data, p, size, wcs=wcs)
     return cutout.data
 
 def main():
@@ -126,15 +131,16 @@ def main():
     rFile = [i for i in x if 'frame-r' in i.split('/')[-1]][0]
     gFile = [i for i in x if 'frame-g' in i.split('/')[-1]][0]
     bFile = [i for i in x if 'frame-u' in i.split('/')[-1]][0]
-    fig, (ax0, ax1, ax2) = plt.subplots(3)
+    ims = []
     fig, ax = plt.subplots(3)
-    r = cutFits(rFile, ra, dec, 10)
-    im0 = ax0.imshow(r, cmap='bone')
-    fig.colorbar(im0, ax=ax0)
-    g = cutFits(gFile, ra, dec, 10)
-    im1 = ax1.imshow(g, cmap='bone')
-    fig.colorbar(im1, ax=ax1)
-    b = cutFits(bFile, ra, dec, 10)
-    im2 = ax2.imshow(b, cmap='bone')
-    fig.colorbar(im2, ax=ax2)
+    c = [
+        cutFits(rFile, ra, dec),
+        cutFits(gFile, ra, dec),
+        cutFits(bFile, ra, dec),
+    ]
+    for i in range(3):
+        ims += [ax[i].imshow(c[i], cmap='bone')]
+        fig.colorbar(ims[-1], ax=ax[i])
     plt.show()
+
+if __name__ == "__main__": main()
