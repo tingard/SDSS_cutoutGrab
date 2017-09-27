@@ -4,9 +4,13 @@ This is a short Python script containing functions to get a fits file from the S
 
 ###Contains:
 
-- `getFitsFromCoord`
+- `querySDSSFromRaDec`
 
-This function accepts a right ascension and declination in degrees, as well as a search threshold, and queries [http://skyserver.sdss.org/dr13/en/tools/search/](http://skyserver.sdss.org/dr13/en/tools/search/) for matching objects. It takes the run, camcol, and field of the returned object (if none or more than one are returned it adjusts the threshold accordingly and queries again) and obtains the relevant observation fits file from:
+This function accepts a right ascension and declination in degrees, as well as a search threshold, and queries [http://skyserver.sdss.org/dr10/en/tools/search/x_radial.aspx](http://skyserver.sdss.org/dr10/en/tools/search/x_radial.aspx) for nearby objects. 
+
+- `getBandFits`
+
+This takes the run, camcol, and field of a returned object from `querySDSSFromRaDec` and obtains the relevant observation fits file from:
 
 [http://data.sdss.org/sas/dr13/eboss/photoObj/frames/301/{run}/{camcol}/frame-{band}-{run:06d}-{camcol}-{field:04d}.fits.bz2](http://data.sdss.org/sas/dr13/eboss/photoObj/frames/301/{run}/{camcol}/frame-{band}-{run:06d}-{camcol}-{field:04d}.fits.bz2)
 

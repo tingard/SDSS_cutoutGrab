@@ -1,0 +1,6 @@
+sdssCutoutGrab/__init__.py
+sdssCutoutGrab.egg-info/PKG-INFO
+sdssCutoutGrab.egg-info/SOURCES.txt
+sdssCutoutGrab.egg-info/dependency_links.txt
+sdssCutoutGrab.egg-info/not-zip-safe
+sdssCutoutGrab.egg-info/top_level.txt
