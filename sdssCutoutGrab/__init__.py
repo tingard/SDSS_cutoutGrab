@@ -94,7 +94,7 @@ def cutFits(f, ra, dec, size=(4 * u.arcsec, 4 * u.arcsec), sigma=False):
         cutout = Cutout2D(fFile[0].data, p, sizeQuant, wcs=wcs)
         if sigma:
             sigma = getSigma(fFile)
-            sigma_cutout = Cutout2D(sigma_data, p, size, wcs=wcs)
+            sigma_cutout = Cutout2D(sigma, p, size, wcs=wcs)
             return cutout.data, sigma_cutout.data
         else:
             return cutout.data
@@ -108,12 +108,13 @@ def cutFits(f, ra, dec, size=(4 * u.arcsec, 4 * u.arcsec), sigma=False):
 
 def getSigma(fFile):
     img = fFile[0].data
+    hdr = fFile[0].header
     simg = getSky(fFile)
     cimg = getCalib(fFile)
     dn = img / cimg + simg
-    camcol = self.header["CAMCOL"]
-    filter = self.header["FILTER"]
-    run = self.header["RUN"]
+    camcol = hdr["CAMCOL"]
+    band = hdr["FILTER"]
+    run = hdr["RUN"]
     darkVariance = get_darkvariance(camcol, band, run)
     gain = get_gain(camcol, band, run)
     dn_err= np.sqrt(dn / gain + darkVariance)
@@ -221,7 +222,10 @@ if __name__ == "__main__":
     r = queryFromRaDec(20.85483159, 0.7553174294, radius=0.2)[0]
     print(r)
     fname = getBandFits(r, overwrite=True)
-    r = cutFits(fname, 20.85487832, 0.7552652609);
-    plt.imshow(r, cmap='gray')
-    plt.axis('off')
+    r, sr = cutFits(fname, 20.85487832, 0.7552652609, sigma=True);
+    fig, ax = plt.subplots(1, 2)
+    ax[0].imshow(r, cmap='gray')
+    ax[1].imshow(sr, cmap='gray', vmin=0, vmax=r.max()/10.0)
+    ax[0].axis('off')
+    ax[1].axis('off')
     plt.show();
