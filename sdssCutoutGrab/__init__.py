@@ -110,8 +110,9 @@ def getBandFits(dataObj, band='r', outFile=None, overwrite=False):
         else False
     )
 
+def cutFits(f, ra, dec, size=(4 * u.arcsec, 4 * u.arcsec), sigma=False):
+    if not os.path.isfile(f): return None
 
-def cutFits(fFile, ra, dec, size=(4 * u.arcsec, 4 * u.arcsec)):
     try:
         if len(size) != 2:
             return
@@ -125,7 +126,12 @@ def cutFits(fFile, ra, dec, size=(4 * u.arcsec, 4 * u.arcsec)):
     wcs = WCS(header=fFile[0].header)
     try:
         cutout = Cutout2D(fFile[0].data, p, sizeQuant, wcs=wcs)
-        return cutout.data
+        if sigma:
+            sigma = getSigma(fFile)
+            sigma_cutout = Cutout2D(sigma, p, size, wcs=wcs)
+            return cutout.data, sigma_cutout.data
+        else:
+            return cutout.data
     except NoOverlapError:
         print(
             'Ra, Dec not inside frame for Ra:' +
@@ -135,12 +141,127 @@ def cutFits(fFile, ra, dec, size=(4 * u.arcsec, 4 * u.arcsec)):
         )
     return False
 
+def getSigma(fFile):
+    img = fFile[0].data
+    hdr = fFile[0].header
+    simg = getSky(fFile)
+    cimg = getCalib(fFile)
+    dn = img / cimg + simg
+    camcol = hdr["CAMCOL"]
+    band = hdr["FILTER"]
+    run = hdr["RUN"]
+    darkVariance = get_darkvariance(camcol, band, run)
+    gain = get_gain(camcol, band, run)
+    dn_err= np.sqrt(dn / gain + darkVariance)
+    img_err = dn_err * cimg
+    return img_err
+
+# Adapted from https://github.com/MickaelRigault/astrobject/blob/master/astrobject/instruments/sdss.py
+def getSky(fFile):
+    from scipy.interpolate import RectBivariateSpline as RBS
+    data = fFile[2].data
+    sky = data['allsky'][0]
+    xi = np.arange(sky.shape[0])
+    yi = np.arange(sky.shape[1])
+    interp = RBS(xi, yi, sky)
+    return interp(data['yinterp'], data['xinterp'])
+
+def getCalib(fFile):
+    return fFile[1].data * np.ones(fFile[0].shape)
+
+# Thanks to https://github.com/MickaelRigault/astrobject/blob/master/astrobject/instruments/sdss.py
+def get_darkvariance(camcol,band,run=None):
+    """
+    data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
+    """
+    DARK_VAR_CCD = {
+            0:{"u":9.61,   "g":15.6025,"r":1.8225,
+               "i":7.84,     "z":0.81},
+            1:{"u":12.6025,"g":1.44,   "r":1.00,
+               "i":[5.76,6.25],"z":1.0},
+            2:{"u":8.7025, "g":1.3225, "r":1.3225,
+               "i":4.6225,   "z":1.0},
+            3:{"u":12.6025,"g":1.96,   "r":1.3225,
+               "i":[6.25,7.5625],"z":[9.61,12.6025]},
+            4:{"u":9.3025, "g":1.1025, "r":0.81,
+               "i":7.84,     "z":[1.8225,2.1025]},
+            5:{"u":7.0225, "g":1.8225, "r":0.9025,
+               "i":5.0625,   "z":1.21}
+            }
+
+    dark = DARK_VAR_CCD[camcol-1][band]
+    # ----------
+    # - output
+    if type(dark) == float:
+        return dark
+    if run is None:
+        raise ValueError("there is two dark-variance possibilites for "+\
+                         " *camcol* %d, *band* %s "%(
+                            camcol-1,band) + "Please, provide a *run*")
+
+    return dark[1] if run>1500 else dark[0]
+
+# Thanks to https://github.com/MickaelRigault/astrobject/blob/master/astrobject/instruments/sdss.py
+def get_gain(camcol,band,run=None):
+    """
+    data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
+    """
+    GAIN_CCD = {
+            0:{"u":1.62, "g":3.32, "r":4.71,
+               "i":5.165,"z":4.745},
+            1:{"u":[1.595,1.825],"g":3.855,"r":4.6,
+               "i":6.565,"z":5.155},
+            2:{"u":1.59,"g":3.845,"r":4.72,
+               "i":4.86,"z":4.885},
+            3:{"u":1.6,"g":3.995,"r":4.76,
+               "i":4.885,"z":4.775},
+            4:{"u":1.47,"g":4.05,"r":4.725,
+               "i":4.64,"z":3.48},
+            5:{"u":2.17,"g":4.035,"r":4.895,
+               "i":4.76,"z":4.69}}
+
+    gain = GAIN_CCD[camcol-1][band]
+    # ----------
+    # - output
+    if type(gain) == float:
+        return gain
+    if run is None:
+        raise ValueError("there is two gain possibilites for *camcol* %d, *band* %s "%(
+            camcol-1,band) + "Please, provide a *run*")
+
+    return gain[1] if run>1100 else gain[0]
+
+def montageFolder(imageFolder, band, objID, montageFolder=''):
+    imF = imageFolder[:-1] if imageFolder[-1] == '/' else imageFolder
+    monF = montageFolder + '/' if len(montageFolder) and montageFolder[-1] != '/' else montageFolder
+    print(imF, monF)
+    if not os.path.exists(folder):
+        raise OSError('Folder provided to montageFolder does not exist')
+    k = { 'imF': imF, 'monF': monF, 'band': band, 'objID': objID }
+    commands = '\n'.join(map(lambda i: i.format(k) for i in (
+        'cd {imF}',
+        '{monF}mImgtbl ./ raw.tbl',
+        '{monF}mMakeHdr raw.tbl template.hdr',
+        '{monF}mProjExec -p ./ raw.tbl template.hdr proj stats.tbl',
+        '{monF}mImgtbl proj images.tbl',
+        '{monF}mOverlaps images.tbl diffs.tbl',
+        '{monF}mDiffExec -p proj diffs.tbl template.hdr diff',
+        '{monF}mFitExec diffs.tbl fits.tbl diff',
+        '{monF}mBgModel images.tbl fits.tbl corr.tbl',
+        '{monF}mBgExec -p proj images.tbl corr.tbl corr',
+        '{monF}mAdd -p corr images.tbl template.hdr ../{band}{objID}.fits',
+    )))
+    print(commands)
 
 if __name__ == "__main__":
     r = queryFromRaDec(20.85483159, 0.7553174294, radius=0.2)[0]
     print(r)
     fname = getBandFits(r, overwrite=True)
-    r = cutFits(fname, 20.85487832, 0.7552652609)
-    plt.imshow(r, cmap='gray')
-    plt.axis('off')
-    plt.show()
+    r, sr = cutFits(fname, 20.85487832, 0.7552652609, sigma=True);
+    fig, ax = plt.subplots(1, 2)
+    ax[0].imshow(r, cmap='gray')
+    ax[1].imshow(sr, cmap='gray', vmin=0, vmax=r.max()/10.0)
+    ax[0].axis('off')
+    ax[1].axis('off')
+    plt.show();
+
