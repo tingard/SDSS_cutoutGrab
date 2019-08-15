@@ -1,4 +1,5 @@
 import sys
+# from numpy import *
 import numpy as np
 import sdssCutoutGrab.fitsUtils as fu
 from astropy.io import fits
@@ -40,9 +41,9 @@ def sdss_dg_psf(dgparams, shape=(51, 51)):
 # Reconstruct the SDSS model PSF from KL basis functions.
 #   hdu: the psField hdu for the band you are looking at.
 #      eg, for r-band:
-#        psfield = pyfits.open('psField-%06i-%i-%04i.fit' % (run,camcol,field))
+#         psfield = pyfits.open('psField-%06i-%i-%04i.fit' % (run,camcol,field))
 #        bandnum = 'ugriz'.index('r')
-#        hdu = psfield[bandnum+1]
+#         hdu = psfield[bandnum+1]
 #
 #   x,y can be scalars or 1-d numpy arrays.
 # Return value:
@@ -72,24 +73,18 @@ def sdss_psf_at_points(hdu, x, y):
         (gridi, gridj) = np.meshgrid(range(nrb), range(ncb))
 
         if psfimgs is None:
-            psfimgs = [
-                np.zeros_like(psf.rrows[k])
-                for xy in np.broadcast(x, y)
-            ]
+            psfimgs = [np.zeros_like(psf.rrows[k]) for xy in np.broadcast(x, y)]
             (outh, outw) = (psf.rnrow[k], psf.rncol[k])
         else:
             assert(psf.rnrow[k] == outh)
             assert(psf.rncol[k] == outw)
 
-        for i, (xi, yi) in enumerate(np.broadcast(x, y)):
-            acoeff_k = sum(((0.001 * xi)**gridi * (0.001 * yi)**gridj * c))
+        for i, (xi, yi) in enumerate(np.broadcast(x,y)):
+            acoeff_k = np.sum(((0.001 * xi)**gridi * (0.001 * yi)**gridj * c))
             if False:  # DEBUG
                 print('coeffs:', (0.001 * xi)**gridi * (0.001 * yi)**gridj)
                 print('c:', c)
-                for (coi, ci) in zip(
-                    ((0.001 * xi)**gridi * (0.001 * yi)**gridj).ravel(),
-                    c.ravel()
-                ):
+                for (coi, ci) in zip(((0.001 * xi)**gridi * (0.001 * yi)**gridj).ravel(), c.ravel()):
                     print('co %g, c %g' % (coi, ci))
                 print('acoeff_k', acoeff_k)
             psfimgs[i] += acoeff_k * psf.rrows[k]

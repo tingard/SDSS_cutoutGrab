@@ -83,7 +83,7 @@ def queryFromRaDec(ra, dec, radius=0.5, limit=10, verbose=False):
             )
             return result
         except json.decoder.JSONDecodeError:
-            if versose:
+            if verbose:
                 print(res.url)
                 printWarning('Could not parse returned JSON: ' + res.url)
             return []
