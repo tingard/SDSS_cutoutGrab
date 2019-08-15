@@ -12,8 +12,7 @@ from astropy.nddata.utils import NoOverlapError
 import astropy.units as u
 from astropy.nddata import Cutout2D
 from astropy.wcs import WCS
-# import montage_wrapper
-import sdss_psf
+import sdssCutoutGrab.sdss_psf as sdss_psf
 
 
 def printWarning(s):
@@ -24,7 +23,7 @@ def printInfo(s):
     print('🤖 \033[32m[sdssCutoutGrab Info] ' + s + '\033[0m')
 
 
-def downloadFile(url, fname, overwrite=False, decompress=True):
+def downloadFile(url, fname, overwrite=False, decompress=True, verbose=False):
     try:
         # check if we already have the file in the output file location
         if os.path.isfile(fname) and not overwrite:
@@ -34,15 +33,17 @@ def downloadFile(url, fname, overwrite=False, decompress=True):
             fstruc = fname.split('/')
             for i in range(1, len(fstruc)):
                 if not os.path.isdir('/'.join(fstruc[:i])):
-                    printInfo(
-                        'Making directory {}'.format('/'.join(fstruc[:i]))
-                    )
+                    if verbose:
+                        printInfo(
+                            'Making directory {}'.format('/'.join(fstruc[:i]))
+                        )
                     os.mkdir('/'.join(fstruc[:i]))
         # start the download
         r = requests.get(url, stream=True)
         if decompress:
             decompressor = bz2.BZ2Decompressor()
-        printInfo('writing to {}'.format(fname))
+        if verbose:
+            printInfo('writing to {}'.format(fname))
         with open(fname, 'wb') as imgf:
             for chunk in r:
                 if decompress:
@@ -52,11 +53,12 @@ def downloadFile(url, fname, overwrite=False, decompress=True):
                 imgf.write(dChunk)
         return True
     except FileNotFoundError as fnfe:
-        print(url, fname)
+        if verbose:
+            print(url, fname)
         raise(fnfe)
 
 
-def queryFromRaDec(ra, dec, radius=0.5, limit=10):
+def queryFromRaDec(ra, dec, radius=0.5, limit=10, verbose=False):
     queryUrl = 'http://skyserver.sdss.org/dr13/en/tools/search/x_results.aspx'
     res = requests.get(queryUrl, params={
         'searchtool': 'Radial',
@@ -71,41 +73,44 @@ def queryFromRaDec(ra, dec, radius=0.5, limit=10):
     })
     if res.status_code == 200:
         try:
-            result = res.json()[0]['Rows']
+            resultJson = res.json()
+            result = resultJson[0]['Rows']
             return sorted(
                 result,
                 key=lambda i: (
                     (i['ra'] - 160.65883)**2 + (i['dec'] - 23.95189)**2
                 )
-            )[0]
+            )
             return result
         except json.decoder.JSONDecodeError:
-            print(res.url)
-            printWarning('Could not parse returned JSON: ' + res.url)
+            if versose:
+                print(res.url)
+                printWarning('Could not parse returned JSON: ' + res.url)
             return []
     else:
-        printWarning('Could not connect to SDSS skyserver: ' + res.url)
+        if verbose:
+            printWarning('Could not connect to SDSS skyserver: ' + res.url)
         return []
 
 
-def getBandFits(dataObj, band='r', outFile=None, overwrite=False):
+def getBandFits(frame, band='r', outFile=None, overwrite=False):
     # make sure we have correct parameters in provided object
-    if not all(dataObj.get(i, False) for i in ['run', 'camcol', 'field']):
+    if not all(frame.get(i, False) for i in ['run', 'camcol', 'field']):
         return
     # define strings and trigger file download
     dataUrl = (
-        "http://data.sdss.org/sas/dr13/eboss/photoObj/frames/301/" +
-        "{path}.bz2"
+        'http://data.sdss.org/sas/dr13/eboss/photoObj/frames/301/'
+        '{path}.bz2'
     )
     queryParams = (
-        '{run}/{camcol}/' +
+        '{run}/{camcol}/'
         'frame-{band}-{run:06d}-{camcol}-{field:04d}.fits'
     )
     sdssFilePath = dataUrl.format(
-        path=queryParams.format(band=band, **dataObj)
+        path=queryParams.format(band=band, **frame)
     )
     fileName = outFile if outFile else (
-        'images/' + queryParams.format(band=band, **dataObj)
+        'fits_images/' + queryParams.format(band=band, **frame)
     )
     return (
         fileName if downloadFile(sdssFilePath, fileName, overwrite=overwrite)
@@ -113,15 +118,15 @@ def getBandFits(dataObj, band='r', outFile=None, overwrite=False):
     )
 
 
-def cutFits(fFile, ra, dec, size=(4 * u.arcsec, 4 * u.arcsec), sigma=False):
-    try:
-        if len(size) != 2:
-            return
-    except Exception as e:
-        print(
+def cutFits(fFile, ra, dec, size=(4, 4), sigma=False, verbose=False):
+    if len(size) != 2:
+        raise IndexError(
             "\033[31msize must be an int or length-2 list/tuple/array\033[0m"
         )
-    frame = fFile[0].header['SYSTEM'].strip()
+    try:
+        frame = fFile[0].header['SYSTEM'].strip()
+    except KeyError:
+        frame = 'FK5'
     p = SkyCoord(ra=ra * u.degree, dec=dec * u.degree, frame=frame.lower())
     sizeQuant = u.Quantity(size, u.arcsec)
     wcs = WCS(header=fFile[0].header)
@@ -129,17 +134,18 @@ def cutFits(fFile, ra, dec, size=(4 * u.arcsec, 4 * u.arcsec), sigma=False):
         cutout = Cutout2D(fFile[0].data, p, sizeQuant, wcs=wcs)
         if sigma:
             sigma = getSigma(fFile)
-            sigma_cutout = Cutout2D(sigma, p, size, wcs=wcs)
-            return cutout.data, sigma_cutout.data
+            sigma_cutout = Cutout2D(sigma, p, sizeQuant, wcs=wcs)
+            return cutout, sigma_cutout
         else:
-            return cutout.data
+            return cutout
     except NoOverlapError:
-        print(
-            'Ra, Dec not inside frame for Ra:' +
-            ' {ra}, Dec: {dec}, and frame: {f}'.format(
-                ra=ra, dec=dec, f=fFile[0]
+        if verbose:
+            print(
+                'Ra, Dec not inside frame for Ra:'
+                + ' {ra}, Dec: {dec}, and frame: {f}'.format(
+                    ra=ra, dec=dec, f=fFile[0]
+                )
             )
-        )
     return False
 
 
@@ -154,7 +160,7 @@ def getSigma(fFile):
     run = hdr["RUN"]
     darkVariance = get_darkvariance(camcol, band, run)
     gain = get_gain(camcol, band, run)
-    dn_err= np.sqrt(dn / gain + darkVariance)
+    dn_err = np.sqrt(dn / gain + darkVariance)
     img_err = dn_err * cimg
     return img_err
 
@@ -201,9 +207,9 @@ def get_darkvariance(camcol, band, run=None):
         return dark
     if run is None:
         raise ValueError(
-            "there is two dark-variance possibilites for " +
-            " *camcol* %d, *band* %s " % (camcol - 1, band) +
-            "Please, provide a *run*"
+            'there is two dark-variance possibilites for '
+            + (' *camcol* %d, *band* %s ' % (camcol - 1, band))
+            + 'Please, provide a *run*'
         )
 
     return dark[1] if run > 1500 else dark[0]
@@ -264,14 +270,13 @@ def get_gain(camcol, band, run=None):
     return gain[1] if run > 1100 else gain[0]
 
 
-def montageFolder(imageFolder, band, objID, montageFolder=''):
+def montageFolderCommand(imageFolder, band, objID, montageFolder=''):
     imF = imageFolder[:-1] if imageFolder[-1] == '/' else imageFolder
     monF = (
         montageFolder + '/'
         if len(montageFolder) and montageFolder[-1] != '/'
         else montageFolder
     )
-    print(imF, monF)
     if not os.path.exists(imageFolder):
         raise OSError('Folder provided to montageFolder does not exist')
     k = {'imF': imF, 'monF': monF, 'band': band, 'objID': objID}
@@ -288,17 +293,19 @@ def montageFolder(imageFolder, band, objID, montageFolder=''):
         '{monF}mBgExec -p proj images.tbl corr.tbl corr',
         '{monF}mAdd -p corr images.tbl template.hdr ../{band}{objID}.fits',
     )))
-    print(commands)
+    return commands
 
 
 if __name__ == "__main__":
     r = queryFromRaDec(20.85483159, 0.7553174294, radius=0.2)[0]
     print(r)
     fname = getBandFits(r, overwrite=True)
-    r, sr = cutFits(fname, 20.85487832, 0.7552652609, sigma=True)
+    ffile = fits.open(fname)
+    r, sr = cutFits(ffile, 20.85487832, 0.7552652609, sigma=True)
     fig, ax = plt.subplots(1, 2)
     ax[0].imshow(r, cmap='gray')
     ax[1].imshow(sr, cmap='gray', vmin=0, vmax=r.max() / 10.0)
     ax[0].axis('off')
     ax[1].axis('off')
+    plt.tight_layout()
     plt.show()

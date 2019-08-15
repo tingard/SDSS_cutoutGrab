@@ -1,4 +1,8 @@
+README.md
+setup.py
 sdssCutoutGrab/__init__.py
+sdssCutoutGrab/fitsUtils.py
+sdssCutoutGrab/sdss_psf.py
 sdssCutoutGrab.egg-info/PKG-INFO
 sdssCutoutGrab.egg-info/SOURCES.txt
 sdssCutoutGrab.egg-info/dependency_links.txt
