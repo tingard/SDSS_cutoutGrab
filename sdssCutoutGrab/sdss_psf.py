@@ -40,9 +40,9 @@ def sdss_dg_psf(dgparams, shape=(51, 51)):
 # Reconstruct the SDSS model PSF from KL basis functions.
 #   hdu: the psField hdu for the band you are looking at.
 #      eg, for r-band:
-#         psfield = pyfits.open('psField-%06i-%i-%04i.fit' % (run,camcol,field))
+#        psfield = pyfits.open('psField-%06i-%i-%04i.fit' % (run,camcol,field))
 #        bandnum = 'ugriz'.index('r')
-#         hdu = psfield[bandnum+1]
+#        hdu = psfield[bandnum+1]
 #
 #   x,y can be scalars or 1-d numpy arrays.
 # Return value:
@@ -81,7 +81,7 @@ def sdss_psf_at_points(hdu, x, y):
             assert(psf.rnrow[k] == outh)
             assert(psf.rncol[k] == outw)
 
-        for i, (xi, yi) in np.enumerate(np.broadcast(x, y)):
+        for i, (xi, yi) in enumerate(np.broadcast(x, y)):
             acoeff_k = sum(((0.001 * xi)**gridi * (0.001 * yi)**gridj * c))
             if False:  # DEBUG
                 print('coeffs:', (0.001 * xi)**gridi * (0.001 * yi)**gridj)
